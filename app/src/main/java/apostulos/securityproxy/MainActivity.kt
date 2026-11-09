@@ -150,7 +150,7 @@ class MainActivity : AppCompatActivity() {
         }
         navScroll.addView(nav)
         root.addView(navScroll, matchWidth())
-        val scroll = ScrollView(this).apply { fillViewport = true }
+        val scroll = ScrollView(this).apply { setFillViewport(true) }
         pageBody = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(8), dp(16), dp(28))
