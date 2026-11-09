@@ -526,7 +526,7 @@ class MainActivity : AppCompatActivity() {
         setHintTextColor(MUTED)
         setTextColor(WHITE)
         textSize = 15f
-        singleLine = true
+        setSingleLine(true)
         setPadding(dp(12), dp(9), dp(12), dp(9))
         background = rounded(INPUT, 10)
         val p = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(8); bottomMargin = dp(8) }
