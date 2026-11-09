@@ -76,12 +76,6 @@ class MainActivity : AppCompatActivity() {
             setPadding(dp(28), dp(28), dp(28), dp(28))
             setBackgroundColor(BG)
         }
-        val cover = ImageView(this).apply {
-            setImageResource(R.drawable.cover_placeholder)
-            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
-            contentDescription = "Ilustração temporária de personagem mascarado"
-        }
-        root.addView(cover, LinearLayout.LayoutParams(dp(150), dp(150)).apply { gravity = Gravity.CENTER; bottomMargin = dp(10) })
         val logo = TextView(this).apply {
             text = "APOSTULOS"
             textSize = 32f
