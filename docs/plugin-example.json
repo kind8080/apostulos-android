@@ -1,0 +1,9 @@
+{
+  "format": "apostulos-plugin",
+  "manifestVersion": 1,
+  "id": "web_headers_plus",
+  "name": "Web Headers Plus",
+  "version": "1.0.0",
+  "description": "Atalho para auditoria passiva de cabeçalhos HTTP",
+  "engine": "web_scan"
+}

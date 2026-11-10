@@ -1,0 +1,9 @@
+{
+  "format": "apostulos-plugin",
+  "manifestVersion": 1,
+  "id": "apostulos_mobsf_connector",
+  "name": "MobSF Connector",
+  "version": "1.0.0",
+  "description": "Conector para testar a API de uma instância MobSF administrada pelo usuário",
+  "engine": "mobsf_remote"
+}

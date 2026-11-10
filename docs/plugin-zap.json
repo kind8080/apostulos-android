@@ -1,0 +1,9 @@
+{
+  "format": "apostulos-plugin",
+  "manifestVersion": 1,
+  "id": "apostulos_zap_connector",
+  "name": "OWASP ZAP Connector",
+  "version": "1.0.0",
+  "description": "Conector para testar a API de uma instância OWASP ZAP autorizada",
+  "engine": "zap_remote"
+}

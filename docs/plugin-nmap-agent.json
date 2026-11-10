@@ -1,0 +1,9 @@
+{
+  "format": "apostulos-plugin",
+  "manifestVersion": 1,
+  "id": "apostulos_nmap_agent",
+  "name": "Nmap Agent Connector",
+  "version": "1.0.0",
+  "description": "Conector de saúde para agente REST Nmap customizado e administrado pelo usuário",
+  "engine": "nmap_agent"
+}

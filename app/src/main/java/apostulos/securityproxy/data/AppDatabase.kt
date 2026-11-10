@@ -1,6 +1,7 @@
 package apostulos.securityproxy.data
 
 import android.content.Context
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -11,6 +12,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Entity(tableName = "audit_logs")
 data class AuditLog(
@@ -31,7 +34,17 @@ data class Vulnerability(
     val description: String,
     val remediation: String,
     val referenceUrl: String,
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    val cvssScore: Double? = null,
+    val cvssVersion: String? = null,
+    val cvssVector: String? = null,
+    val attackVector: String? = null,
+    val epssScore: Double? = null,
+    @ColumnInfo(defaultValue = "0") val knownExploited: Boolean = false,
+    val publishedAt: Long? = null,
+    val modifiedAt: Long? = null,
+    @ColumnInfo(defaultValue = "''") val affectedProducts: String = "",
+    @ColumnInfo(defaultValue = "'OWASP/CWE'") val source: String = "OWASP/CWE"
 )
 
 @Entity(tableName = "findings")
@@ -60,6 +73,46 @@ data class ScanRecord(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "installed_plugins")
+data class InstalledPlugin(
+    @PrimaryKey val pluginId: String,
+    val name: String,
+    val version: String,
+    val description: String,
+    val engine: String,
+    @ColumnInfo(defaultValue = "'{}'") val configJson: String = "{}",
+    @ColumnInfo(defaultValue = "1") val enabled: Boolean = true,
+    val installedAt: Long = System.currentTimeMillis()
+)
+
+@Dao
+interface InstalledPluginDao {
+    @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun install(plugin: InstalledPlugin)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(plugin: InstalledPlugin)
+    @Query("SELECT * FROM installed_plugins ORDER BY name COLLATE NOCASE") suspend fun all(): List<InstalledPlugin>
+    @Query("SELECT * FROM installed_plugins WHERE pluginId = :id LIMIT 1") suspend fun get(id: String): InstalledPlugin?
+    @Query("UPDATE installed_plugins SET enabled = :enabled WHERE pluginId = :id") suspend fun setEnabled(id: String, enabled: Boolean)
+    @Query("UPDATE installed_plugins SET configJson = :config WHERE pluginId = :id") suspend fun saveConfig(id: String, config: String)
+    @Query("DELETE FROM installed_plugins WHERE pluginId = :id") suspend fun remove(id: String)
+}
+
+@Entity(tableName = "source_sync")
+data class SourceSync(
+    @PrimaryKey val source: String,
+    val lastAttemptAt: Long,
+    val lastSuccessAt: Long? = null,
+    @ColumnInfo(defaultValue = "0") val recordsProcessed: Int = 0,
+    val status: String,
+    @ColumnInfo(defaultValue = "''") val details: String = ""
+)
+
+@Dao
+interface SourceSyncDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun save(item: SourceSync)
+    @Query("SELECT * FROM source_sync ORDER BY source") suspend fun all(): List<SourceSync>
+    @Query("SELECT * FROM source_sync WHERE source = :source LIMIT 1") suspend fun get(source: String): SourceSync?
+}
+
 @Dao
 interface AuditLogDao {
     @Insert suspend fun add(item: AuditLog)
@@ -70,9 +123,14 @@ interface AuditLogDao {
 @Dao
 interface VulnerabilityDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertAll(items: List<Vulnerability>): List<Long>
-    @Query("SELECT * FROM vulnerabilities ORDER BY CASE severity WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END, title LIMIT 250") suspend fun all(): List<Vulnerability>
-    @Query("SELECT * FROM vulnerabilities WHERE title LIKE '%' || :q || '%' OR cve LIKE '%' || :q || '%' OR cwe LIKE '%' || :q || '%' OR description LIKE '%' || :q || '%' ORDER BY title LIMIT 100") suspend fun search(q: String): List<Vulnerability>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertAll(items: List<Vulnerability>)
+    @Query("SELECT * FROM vulnerabilities ORDER BY knownExploited DESC, (COALESCE(cvssScore, 0) * 7.0 + COALESCE(epssScore, 0) * 20.0) DESC, CASE severity WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 ELSE 4 END, title LIMIT 250") suspend fun all(): List<Vulnerability>
+    @Query("SELECT * FROM vulnerabilities WHERE title LIKE '%' || :q || '%' OR cve LIKE '%' || :q || '%' OR cwe LIKE '%' || :q || '%' OR description LIKE '%' || :q || '%' ORDER BY knownExploited DESC, (COALESCE(cvssScore, 0) * 7.0 + COALESCE(epssScore, 0) * 20.0) DESC, title LIMIT 100") suspend fun search(q: String): List<Vulnerability>
     @Query("SELECT COUNT(*) FROM vulnerabilities") suspend fun count(): Int
+    @Query("SELECT cve FROM vulnerabilities WHERE cve IS NOT NULL") suspend fun cveIds(): List<String?>
+    @Query("UPDATE vulnerabilities SET epssScore = :score, updatedAt = :updatedAt WHERE cve = :cve") suspend fun updateEpss(cve: String, score: Double, updatedAt: Long)
+    @Query("UPDATE vulnerabilities SET knownExploited = 0") suspend fun clearKnownExploited()
+    @Query("UPDATE vulnerabilities SET knownExploited = 1 WHERE cve = :cve") suspend fun markKnownExploited(cve: String): Int
 }
 
 @Dao
@@ -93,9 +151,36 @@ interface ScanDao {
     @Query("SELECT COUNT(*) FROM scan_history") suspend fun count(): Int
 }
 
+private val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE vulnerabilities ADD COLUMN cvssScore REAL")
+        db.execSQL("ALTER TABLE vulnerabilities ADD COLUMN cvssVersion TEXT")
+        db.execSQL("ALTER TABLE vulnerabilities ADD COLUMN cvssVector TEXT")
+        db.execSQL("ALTER TABLE vulnerabilities ADD COLUMN attackVector TEXT")
+        db.execSQL("ALTER TABLE vulnerabilities ADD COLUMN epssScore REAL")
+        db.execSQL("ALTER TABLE vulnerabilities ADD COLUMN knownExploited INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE vulnerabilities ADD COLUMN publishedAt INTEGER")
+        db.execSQL("ALTER TABLE vulnerabilities ADD COLUMN modifiedAt INTEGER")
+        db.execSQL("ALTER TABLE vulnerabilities ADD COLUMN affectedProducts TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE vulnerabilities ADD COLUMN source TEXT NOT NULL DEFAULT 'OWASP/CWE'")
+    }
+}
+
+private val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS installed_plugins (pluginId TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, version TEXT NOT NULL, description TEXT NOT NULL, engine TEXT NOT NULL, configJson TEXT NOT NULL DEFAULT '{}', enabled INTEGER NOT NULL DEFAULT 1, installedAt INTEGER NOT NULL)")
+    }
+}
+
+private val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS source_sync (source TEXT NOT NULL PRIMARY KEY, lastAttemptAt INTEGER NOT NULL, lastSuccessAt INTEGER, recordsProcessed INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL, details TEXT NOT NULL DEFAULT '')")
+    }
+}
+
 @Database(
-    entities = [AuditLog::class, Vulnerability::class, Finding::class, ScanRecord::class],
-    version = 1,
+    entities = [AuditLog::class, Vulnerability::class, Finding::class, ScanRecord::class, SourceSync::class, InstalledPlugin::class],
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -103,6 +188,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun vulnerabilityDao(): VulnerabilityDao
     abstract fun findingDao(): FindingDao
     abstract fun scanDao(): ScanDao
+    abstract fun sourceSyncDao(): SourceSyncDao
+    abstract fun installedPluginDao(): InstalledPluginDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -111,7 +198,7 @@ abstract class AppDatabase : RoomDatabase() {
                 context.applicationContext,
                 AppDatabase::class.java,
                 "apostulos.db"
-            ).fallbackToDestructiveMigration().build().also { INSTANCE = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { INSTANCE = it }
         }
     }
 }
@@ -133,6 +220,6 @@ object VulnerabilitySeed {
             Vulnerability(title = "API Unrestricted Resource Consumption", category = "API", cwe = "CWE-770", severity = "MEDIUM", description = "Ausência de limites pode permitir consumo excessivo de recursos e indisponibilidade.", remediation = "Aplique rate limiting, limites de tamanho, paginação, timeouts e quotas por identidade.", referenceUrl = "https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/"),
             Vulnerability(title = "Sensitive Data Exposure in Logs", category = "Android/Web/API", cwe = "CWE-532", severity = "MEDIUM", description = "Tokens, credenciais ou dados pessoais em logs podem ser acessados por terceiros ou ferramentas de diagnóstico.", remediation = "Redija dados sensíveis, limite acesso aos logs e evite registrar segredos.", referenceUrl = "https://cwe.mitre.org/data/definitions/532.html")
         )
-        db.vulnerabilityDao().insertAll(entries)
+        db.vulnerabilityDao().upsertAll(entries)
     }
 }
