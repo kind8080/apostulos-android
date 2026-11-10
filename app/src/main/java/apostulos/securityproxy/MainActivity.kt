@@ -91,7 +91,7 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(dp(28), dp(28), dp(28), dp(28))
-            setBackgroundColor(BG)
+            setBackgroundResource(R.drawable.apostulos_background)
         }
         val logo = TextView(this).apply {
             text = "APOSTULOS"
@@ -128,11 +128,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun render(page: Page) {
         currentPage = page
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(BG) }
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.apostulos_background)
+        }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(18), dp(18), dp(10))
-            setBackgroundColor(BG)
+            setBackgroundColor(Color.TRANSPARENT)
         }
         val title = TextView(this).apply {
             text = "APOSTULOS"
