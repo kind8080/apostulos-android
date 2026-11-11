@@ -64,7 +64,7 @@ class MainActivity : AppCompatActivity() {
 
     private enum class Page(val label: String) {
         HOME("Início"), PROXY("Proxy"), VPN("VPN"), DATABASE("Banco"), WEB("Web"), ANDROID("Android"), API("APIs"),
-        CONSOLE("Console"), PLUGINS("Plugins"), TOOLS("Ferramentas"), FINDINGS("Falhas"), REPORTS("Relatórios"), SETTINGS("Ajustes")
+        CONSOLE("Console"), PLUGINS("Plugins"), TOOLS("Ferramentas"), KALI("Kali Linux"), FINDINGS("Falhas"), REPORTS("Relatórios"), SETTINGS("Ajustes")
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -91,12 +91,12 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(dp(28), dp(28), dp(28), dp(28))
-            setBackgroundResource(R.drawable.apostulos_background)
+            setBackgroundColor(BG)
         }
         val logo = TextView(this).apply {
             text = "APOSTULOS"
             textSize = 32f
-            setTextColor(GOLD)
+            setTextColor(ACCENT)
             typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
             gravity = Gravity.CENTER
         }
@@ -130,7 +130,7 @@ class MainActivity : AppCompatActivity() {
         currentPage = page
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.apostulos_background)
+            setBackgroundColor(BG)
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -140,7 +140,7 @@ class MainActivity : AppCompatActivity() {
         val title = TextView(this).apply {
             text = "APOSTULOS"
             textSize = 23f
-            setTextColor(GOLD)
+            setTextColor(ACCENT)
             typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
         }
         header.addView(title, matchWrap())
@@ -165,7 +165,7 @@ class MainActivity : AppCompatActivity() {
         val groups = listOf(
             "Início" to listOf(Page.HOME),
             "Análises" to listOf(Page.WEB, Page.ANDROID, Page.API, Page.DATABASE, Page.FINDINGS),
-            "Ferramentas" to listOf(Page.PROXY, Page.VPN, Page.CONSOLE, Page.TOOLS),
+            "Ferramentas" to listOf(Page.PROXY, Page.VPN, Page.CONSOLE, Page.TOOLS, Page.KALI),
             "Plugins" to listOf(Page.PLUGINS),
             "Mais" to listOf(Page.REPORTS, Page.SETTINGS)
         )
@@ -177,7 +177,7 @@ class MainActivity : AppCompatActivity() {
                 gravity = Gravity.CENTER
                 maxLines = 1
                 setPadding(dp(3), dp(11), dp(3), dp(11))
-                setTextColor(if (index == activeGroup) GOLD else WHITE)
+                setTextColor(if (index == activeGroup) ACCENT else MUTED)
                 typeface = Typeface.create("sans-serif-medium", if (index == activeGroup) Typeface.BOLD else Typeface.NORMAL)
                 setOnClickListener {
                     if (group.second.size == 1) render(group.second.first())
@@ -200,6 +200,7 @@ class MainActivity : AppCompatActivity() {
             Page.CONSOLE -> showConsole()
             Page.PLUGINS -> showPlugins()
             Page.TOOLS -> showTools()
+            Page.KALI -> showKali()
             Page.FINDINGS -> showFindings()
             Page.REPORTS -> showReports()
             Page.SETTINGS -> showSettings()
@@ -215,35 +216,70 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showHome() {
-        pageBody.addView(label("Centro de segurança", 24f, WHITE, true), matchWrap())
-        pageBody.addView(label("Análises autorizadas, evidências e recomendações em um só lugar.", 14f, MUTED), matchWrap())
+        val hero = card(pageBody)
+        val mark = TextView(this).apply {
+            text = "⬡  APOSTULOS"
+            textSize = 22f
+            setTextColor(ACCENT)
+            typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
+        }
+        hero.addView(mark, matchWrap())
+        hero.addView(label("Central de segurança e auditoria autorizada", 13f, MUTED), matchWrap())
+
         val stats = card(pageBody)
-        stats.addView(label("VISÃO GERAL", 11f, GOLD, true), matchWrap())
+        stats.addView(label("RESUMO DO AMBIENTE", 11f, ACCENT, true), matchWrap())
+        val summary = label("Carregando indicadores…", 16f, WHITE, true)
+        stats.addView(summary, matchWrap())
         lifecycleScope.launch {
             val vulnerabilities = withContext(Dispatchers.IO) { db.vulnerabilityDao().count() }
             val findings = withContext(Dispatchers.IO) { db.findingDao().count() }
             val scans = withContext(Dispatchers.IO) { db.scanDao().count() }
-            stats.addView(label("$vulnerabilities referências • $findings achados • $scans análises", 17f, WHITE, true), matchWrap())
+            summary.text = "$vulnerabilities referências  •  $findings achados  •  $scans análises"
         }
-        sectionTitle("Módulos")
-        listOf(
-            Page.PROXY to "Proxy HTTP local e histórico de conexões",
-            Page.VPN to "Estado da VPN gerenciada pelo Android",
-            Page.DATABASE to "Base local de CVE, CWE e OWASP",
-            Page.WEB to "Verificações passivas de aplicações web",
-            Page.ANDROID to "Análise estática heurística de APK",
-            Page.API to "Verificações iniciais de APIs",
-            Page.CONSOLE to "Console simples para módulos de auditoria autorizada",
-            Page.PLUGINS to "Ativar e desativar módulos internos",
-            Page.FINDINGS to "Achados, gravidade e ferramentas recomendadas",
-            Page.REPORTS to "Histórico e exportação de relatórios"
-        ).forEach { (page, description) ->
-            val c = card(pageBody)
-            c.addView(label(page.label, 17f, GOLD, true), matchWrap())
-            c.addView(label(description, 13f, MUTED), matchWrap())
-            c.addView(actionButton("ABRIR ${page.label.uppercase(Locale.ROOT)}") { render(page) }, matchWidth())
+
+        sectionTitle("Áreas de trabalho")
+        homeArea("⌕", "Análises", "Web, APIs, Android, CVE e achados", "ABRIR ANÁLISES") {
+            showNavigationMenu("Análises", listOf(Page.WEB, Page.API, Page.ANDROID, Page.DATABASE, Page.FINDINGS))
         }
-        pageBody.addView(label("Importante: use somente em ativos próprios ou com autorização expressa. Os resultados são indicadores e exigem validação manual.", 12f, MUTED), matchWrap())
+        homeArea("⚙", "Ferramentas", "Proxy local, VPN, console e utilitários", "ABRIR FERRAMENTAS") {
+            showNavigationMenu("Ferramentas", listOf(Page.PROXY, Page.VPN, Page.CONSOLE, Page.TOOLS))
+        }
+        homeArea("▦", "Plugins", "Conectores, módulos e configurações", "ABRIR PLUGINS") { render(Page.PLUGINS) }
+        homeArea("⬡", "Kali Linux", "Conexão com o agente remoto e inventário de ferramentas", "ABRIR KALI LINUX") { render(Page.KALI) }
+        homeArea("▤", "Relatórios", "Histórico, evidências e exportação", "ABRIR RELATÓRIOS") { render(Page.REPORTS) }
+        pageBody.addView(label("Utilize somente em sistemas próprios ou com autorização expressa. Resultados automatizados exigem validação manual.", 12f, MUTED), matchWrap())
+    }
+
+    private fun homeArea(symbol: String, title: String, description: String, action: String, onClick: () -> Unit) {
+        val panel = card(pageBody)
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val glyph = TextView(this).apply {
+            text = symbol
+            textSize = 27f
+            gravity = Gravity.CENTER
+            setTextColor(ACCENT)
+            background = rounded(INPUT, 12)
+        }
+        row.addView(glyph, LinearLayout.LayoutParams(dp(48), dp(48)))
+        val copy = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, 0, 0) }
+        copy.addView(label(title, 16f, WHITE, true), matchWrap())
+        copy.addView(label(description, 12f, MUTED), matchWrap())
+        row.addView(copy, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        panel.addView(row, matchWidth())
+        panel.addView(actionButton(action) { onClick() }, matchWidth())
+    }
+
+    private fun showKali() {
+        pageBody.addView(label("Kali Linux Bridge", 23f, WHITE, true), matchWrap())
+        pageBody.addView(label("Conecte o APOSTULOS a um servidor Kali Linux administrado por você. O Android continua executando seus módulos locais; o Kali é um ambiente remoto separado.", 13f, MUTED), matchWrap())
+        val status = card(pageBody)
+        status.addView(label("MODO ATUAL: INVENTÁRIO SEGURO", 12f, ACCENT, true), matchWrap())
+        status.addView(label("A ponte consulta a API de capacidades e informa quais ferramentas estão instaladas. A execução remota de comandos ainda está desativada nesta etapa.", 13f, WHITE), matchWrap())
+        status.addView(label("Ferramentas inventariadas: Nmap, Nuclei, Nikto, SQLmap, WhatWeb, Wapiti e TShark.", 12f, MUTED), matchWrap())
+        status.addView(label("Para conectar: abra Plugins, localize Kali Linux Bridge, configure a URL HTTPS e o token e use Salvar e testar.", 12f, MUTED), matchWrap())
+        status.addView(actionButton("CONFIGURAR CONEXÃO KALI") { render(Page.PLUGINS) }, matchWidth())
+        pageBody.addView(label("Segurança", 17f, WHITE, true), matchWrap())
+        pageBody.addView(label("Não exponha a API diretamente à Internet. Use HTTPS, token forte, firewall e escopo de rede autorizado. Esta tela não habilita execução arbitrária.", 12f, MUTED), matchWrap())
     }
 
     private fun showProxy() {
@@ -251,7 +287,7 @@ class MainActivity : AppCompatActivity() {
         pageBody.addView(label("Servidor local em 127.0.0.1:8888. O método CONNECT encaminha o túnel TLS sem descriptografar o conteúdo.", 14f, MUTED), matchWrap())
         val state = card(pageBody)
         val running = LocalProxyService.isActive || getSharedPreferences("apostulos_state", MODE_PRIVATE).getBoolean("proxy_running", false)
-        state.addView(label(if (running) "ESTADO: INICIADO" else "ESTADO: PARADO", 18f, if (running) GREEN else GOLD, true), matchWrap())
+        state.addView(label(if (running) "ESTADO: INICIADO" else "ESTADO: PARADO", 18f, if (running) GREEN else ACCENT, true), matchWrap())
         state.addView(label("Endereço: 127.0.0.1\nPorta: ${LocalProxyService.PORT}\nTipo: HTTP forward + CONNECT", 14f, WHITE), matchWrap())
         state.addView(actionButton("INICIAR PROXY") {
             LocalProxyService.start(this)
@@ -284,14 +320,14 @@ class MainActivity : AppCompatActivity() {
         pageBody.addView(label("VPN do Android", 23f, WHITE, true), matchWrap())
         val active = isVpnActive()
         val c = card(pageBody)
-        c.addView(label(if (active) "VPN DETECTADA COMO ATIVA" else "NENHUMA VPN ATIVA DETECTADA", 18f, if (active) GREEN else GOLD, true), matchWrap())
+        c.addView(label(if (active) "VPN DETECTADA COMO ATIVA" else "NENHUMA VPN ATIVA DETECTADA", 18f, if (active) GREEN else ACCENT, true), matchWrap())
         c.addView(label("O APOSTULOS consulta o estado de rede exposto pelo Android e abre as configurações do sistema. Ele não fornece servidor VPN nem cria um túnel próprio sem um perfil/provedor configurado.", 13f, MUTED), matchWrap())
         c.addView(actionButton("ABRIR CONFIGURAÇÕES DE VPN") {
             runCatching { startActivity(Intent(Settings.ACTION_VPN_SETTINGS)) }
                 .onFailure { toast("Não foi possível abrir as configurações de VPN") }
         }, matchWidth())
         c.addView(actionButton("ATUALIZAR ESTADO") { render(Page.VPN) }, matchWidth())
-        pageBody.addView(label("Privacidade", 16f, GOLD, true), matchWrap())
+        pageBody.addView(label("Privacidade", 16f, ACCENT, true), matchWrap())
         pageBody.addView(label("O Android não permite que um aplicativo comum leia o conteúdo de tráfego de outra VPN. Para um túnel próprio, será necessário escolher um provedor e importar uma configuração compatível (por exemplo, WireGuard). Não exibimos um falso estado de VPN ativa.", 13f, MUTED), matchWrap())
     }
 
@@ -371,7 +407,7 @@ class MainActivity : AppCompatActivity() {
             if (currentPage != Page.DATABASE) return@launch
             val results = databaseResults ?: return@launch
             results.removeAllViews()
-            results.addView(label("${items.size} registro(s)", 17f, GOLD, true), matchWrap())
+            results.addView(label("${items.size} registro(s)", 17f, ACCENT, true), matchWrap())
             items.take(40).forEach { item ->
                 val c = card(results)
                 c.addView(label(item.title, 16f, WHITE, true), matchWrap())
@@ -382,9 +418,9 @@ class MainActivity : AppCompatActivity() {
                     if (item.knownExploited) add("CISA KEV: explorada")
                     if (item.attackVector != null) add("Vetor: ${item.attackVector}")
                 }
-                if (riskDetails.isNotEmpty()) c.addView(label(riskDetails.joinToString(" • "), 12f, GOLD, true), matchWrap())
+                if (riskDetails.isNotEmpty()) c.addView(label(riskDetails.joinToString(" • "), 12f, ACCENT, true), matchWrap())
                 val triage = RiskAssessment.assess(item.cvssScore, item.epssScore, item.knownExploited)
-                c.addView(label("PRIORIDADE APOSTULOS: ${triage.priority}${triage.score?.let { " • ${it}/100" } ?: ""}", 12f, if (item.knownExploited || triage.priority == "CRÍTICO" || triage.priority == "ALTO") RED else GOLD, true), matchWrap())
+                c.addView(label("PRIORIDADE APOSTULOS: ${triage.priority}${triage.score?.let { " • ${it}/100" } ?: ""}", 12f, if (item.knownExploited || triage.priority == "CRÍTICO" || triage.priority == "ALTO") RED else ACCENT, true), matchWrap())
                 c.addView(label(triage.explanation, 10f, MUTED), matchWrap())
                 if (item.cvssVector != null) c.addView(label("CVSS ${item.cvssVersion ?: "?"} vetor: ${item.cvssVector}", 10f, MUTED), matchWrap())
                 if (item.affectedProducts.isNotBlank()) c.addView(label("Produtos/versões afetados (CPE):\n${item.affectedProducts.lines().take(5).joinToString("\n")}", 10f, MUTED), matchWrap())
@@ -558,7 +594,7 @@ class MainActivity : AppCompatActivity() {
             toast("Modelo JSON copiado")
         }, matchWidth())
 
-        pageBody.addView(label("Catálogo de conectores externos", 17f, GOLD, true), matchWrap())
+        pageBody.addView(label("Catálogo de conectores externos", 17f, ACCENT, true), matchWrap())
         pageBody.addView(label("Os conectores exigem serviços instalados e administrados por você. O APOSTULOS não baixa nem executa binários externos.", 12f, MUTED), matchWrap())
         PluginCatalog.entries.forEach { entry ->
             val c = card(pageBody)
@@ -589,7 +625,7 @@ class MainActivity : AppCompatActivity() {
             c.addView(actionButton("DOCUMENTAÇÃO OFICIAL") { openExternalUrl(entry.officialUrl) }, matchWidth())
         }
 
-        pageBody.addView(label("Módulos que já vêm no aplicativo", 17f, GOLD, true), matchWrap())
+        pageBody.addView(label("Módulos que já vêm no aplicativo", 17f, ACCENT, true), matchWrap())
         val modules = listOf(
             Triple("web_scan", "Auditoria Web", "Cabeçalhos HTTP, cookies e configurações observáveis"),
             Triple("api_scan", "Auditoria de APIs", "Verificações passivas de resposta e CORS"),
@@ -602,7 +638,7 @@ class MainActivity : AppCompatActivity() {
             val toggle = CheckBox(this).apply {
                 text = name
                 textSize = 15f
-                setTextColor(GOLD)
+                setTextColor(ACCENT)
                 isChecked = pluginEnabled(id)
                 setOnCheckedChangeListener { _, checked ->
                     getSharedPreferences("apostulos_plugins", MODE_PRIVATE).edit().putBoolean(id, checked).apply()
@@ -613,7 +649,7 @@ class MainActivity : AppCompatActivity() {
             c.addView(label(description, 12f, MUTED), matchWrap())
         }
 
-        pageBody.addView(label("Pacotes externos instalados", 17f, GOLD, true), matchWrap())
+        pageBody.addView(label("Pacotes externos instalados", 17f, ACCENT, true), matchWrap())
         lifecycleScope.launch {
             val installed = withContext(Dispatchers.IO) { db.installedPluginDao().all() }
             if (installed.isEmpty()) {
@@ -627,7 +663,7 @@ class MainActivity : AppCompatActivity() {
                 c.addView(label("Adaptador: ${plugin.engine} • código executado: interno do APOSTULOS", 11f, MUTED), matchWrap())
                 val toggle = CheckBox(this@MainActivity).apply {
                     text = "Plugin ativado"
-                    setTextColor(GOLD)
+                    setTextColor(ACCENT)
                     isChecked = plugin.enabled
                     setOnCheckedChangeListener { _, checked ->
                         getSharedPreferences("apostulos_plugins", MODE_PRIVATE).edit().putBoolean(plugin.engine, checked).apply()
@@ -672,7 +708,7 @@ class MainActivity : AppCompatActivity() {
             val events = withContext(Dispatchers.IO) {
                 db.auditLogDao().latest().filter { it.category == "Plugins" }.take(12)
             }
-            pageBody.addView(label("Atividade recente dos plugins", 17f, GOLD, true), matchWrap())
+            pageBody.addView(label("Atividade recente dos plugins", 17f, ACCENT, true), matchWrap())
             if (events.isEmpty()) {
                 pageBody.addView(label("Nenhuma atividade registrada ainda.", 12f, MUTED), matchWrap())
             } else events.forEach { event ->
@@ -995,7 +1031,7 @@ class MainActivity : AppCompatActivity() {
         )
         tools.forEach { (name, description, url) ->
             val c = card(pageBody)
-            c.addView(label(name, 17f, GOLD, true), matchWrap())
+            c.addView(label(name, 17f, ACCENT, true), matchWrap())
             c.addView(label(description, 13f, MUTED), matchWrap())
             c.addView(actionButton("SITE OFICIAL") { openUrl(url) }, matchWidth())
         }
@@ -1013,7 +1049,7 @@ class MainActivity : AppCompatActivity() {
                 c.addView(label("${item.severity} • ${item.category} • ${item.status}", 11f, severityColor(item.severity), true), matchWrap())
                 c.addView(label("Alvo: ${item.target}", 11f, MUTED), matchWrap())
                 c.addView(label("Confiança: ${item.confidence}\nEvidência: ${item.evidence}", 12f, WHITE), matchWrap())
-                c.addView(label("Ferramenta recomendada: ${item.recommendedTool}", 13f, GOLD, true), matchWrap())
+                c.addView(label("Ferramenta recomendada: ${item.recommendedTool}", 13f, ACCENT, true), matchWrap())
                 c.addView(label("Correção: ${item.remediation}", 12f, MUTED), matchWrap())
                 val row = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL }
                 row.addView(actionButton("MARCAR CORRIGIDA") {
@@ -1059,7 +1095,7 @@ class MainActivity : AppCompatActivity() {
             if (scans.isEmpty()) pageBody.addView(label("Nenhuma análise executada.", 13f, MUTED), matchWrap())
             scans.forEach { scan ->
                 val c = card(pageBody)
-                c.addView(label("${scan.scanType} • ${scan.status}", 15f, GOLD, true), matchWrap())
+                c.addView(label("${scan.scanType} • ${scan.status}", 15f, ACCENT, true), matchWrap())
                 c.addView(label("${scan.target}\n${scan.summary}\n${date(scan.createdAt)}", 12f, WHITE), matchWrap())
             }
         }
@@ -1088,7 +1124,7 @@ class MainActivity : AppCompatActivity() {
     private fun loadVulnerabilityListDummy() = Unit
 
     private fun sectionTitle(text: String) {
-        pageBody.addView(label(text, 17f, GOLD, true), matchWrap())
+        pageBody.addView(label(text, 17f, ACCENT, true), matchWrap())
     }
 
     private fun card(parent: LinearLayout): LinearLayout {
@@ -1129,7 +1165,7 @@ class MainActivity : AppCompatActivity() {
         textSize = 12f
         isAllCaps = false
         setTextColor(if (danger) WHITE else BG)
-        background = rounded(if (danger) RED else GOLD, 12)
+        background = rounded(if (danger) RED else ACCENT, 12)
         setOnClickListener { onClick() }
         val p = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(5); bottomMargin = dp(5) }
         layoutParams = p
@@ -1147,7 +1183,7 @@ class MainActivity : AppCompatActivity() {
     private fun date(time: Long): String = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "BR")).format(Date(time))
     private fun severityColor(severity: String): Int = when (severity.uppercase(Locale.ROOT)) {
         "CRITICAL", "HIGH" -> RED
-        "MEDIUM", "LOW" -> GOLD
+        "MEDIUM", "LOW" -> ACCENT
         else -> MUTED
     }
 
@@ -1157,10 +1193,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val BG = 0xFF0B0E14.toInt()
-        private const val PANEL = 0xFF171D28.toInt()
-        private const val INPUT = 0xFF202938.toInt()
-        private const val GOLD = 0xFFD6B66E.toInt()
+        private const val BG = 0xFF0B1220.toInt()
+        private const val PANEL = 0xFF151F30.toInt()
+        private const val INPUT = 0xFF202D40.toInt()
+        private const val ACCENT = 0xFF3B82F6.toInt()
         private const val WHITE = 0xFFF4F6FA.toInt()
         private const val MUTED = 0xFF9AA5B5.toInt()
         private const val GREEN = 0xFF4BC28A.toInt()
