@@ -1,4 +1,3 @@
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -6,7 +5,23 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
+val localProperties = java.util.Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use { load(it) }
+    }
+}
+
+fun quotedBuildConfigValue(name: String): String {
+    val value = localProperties.getProperty(name, "")
+    return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+}
+
 android {
+    buildFeatures {
+        buildConfig = true
+    }
+
     namespace = "apostulos.securityproxy"
     compileSdk = 35
 
@@ -17,6 +32,8 @@ android {
         versionCode = 6
         versionName = "3.0.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "SUPABASE_URL", quotedBuildConfigValue("SUPABASE_URL"))
+        buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", quotedBuildConfigValue("SUPABASE_PUBLISHABLE_KEY"))
     }
 
     buildTypes {
