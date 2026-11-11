@@ -147,23 +147,6 @@ class MainActivity : AppCompatActivity() {
         header.addView(label("PENTEST WORKSPACE  /  ${page.label.uppercase(Locale.ROOT)}", 10f, MUTED), matchWrap())
         root.addView(header, matchWidth())
 
-        val navScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
-        val nav = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(12), dp(4), dp(12), dp(10)) }
-        Page.values().forEach { item ->
-            val button = TextView(this).apply {
-                text = item.label
-                textSize = 12f
-                gravity = Gravity.CENTER
-                setPadding(dp(13), dp(10), dp(13), dp(10))
-                setTextColor(if (item == page) BG else WHITE)
-                background = rounded(if (item == page) GOLD else PANEL, 24)
-                setOnClickListener { render(item) }
-            }
-            val params = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38)).apply { marginEnd = dp(7) }
-            nav.addView(button, params)
-        }
-        navScroll.addView(nav)
-        root.addView(navScroll, matchWidth())
         val scroll = ScrollView(this).apply { setFillViewport(true) }
         pageBody = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -171,6 +154,39 @@ class MainActivity : AppCompatActivity() {
         }
         scroll.addView(pageBody)
         root.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+
+        // Navegação inferior compacta: cinco áreas principais; cada uma abre seus módulos.
+        val bottomNav = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(5), dp(7), dp(5), dp(7))
+            setBackgroundColor(Color.rgb(18, 18, 18))
+        }
+        val groups = listOf(
+            "Início" to listOf(Page.HOME),
+            "Análises" to listOf(Page.WEB, Page.ANDROID, Page.API, Page.DATABASE, Page.FINDINGS),
+            "Ferramentas" to listOf(Page.PROXY, Page.VPN, Page.CONSOLE, Page.TOOLS),
+            "Plugins" to listOf(Page.PLUGINS),
+            "Mais" to listOf(Page.REPORTS, Page.SETTINGS)
+        )
+        val activeGroup = groups.indexOfFirst { page in it.second }.coerceAtLeast(0)
+        groups.forEachIndexed { index, group ->
+            val item = TextView(this).apply {
+                text = group.first
+                textSize = 11f
+                gravity = Gravity.CENTER
+                maxLines = 1
+                setPadding(dp(3), dp(11), dp(3), dp(11))
+                setTextColor(if (index == activeGroup) GOLD else WHITE)
+                typeface = Typeface.create("sans-serif-medium", if (index == activeGroup) Typeface.BOLD else Typeface.NORMAL)
+                setOnClickListener {
+                    if (group.second.size == 1) render(group.second.first())
+                    else showNavigationMenu(group.first, group.second)
+                }
+            }
+            bottomNav.addView(item, LinearLayout.LayoutParams(0, dp(48), 1f))
+        }
+        root.addView(bottomNav, matchWidth())
         setContentView(root)
 
         when (page) {
@@ -188,6 +204,14 @@ class MainActivity : AppCompatActivity() {
             Page.REPORTS -> showReports()
             Page.SETTINGS -> showSettings()
         }
+    }
+
+    private fun showNavigationMenu(title: String, pages: List<Page>) {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setItems(pages.map { it.label }.toTypedArray()) { _, which -> render(pages[which]) }
+            .setNegativeButton("Fechar", null)
+            .show()
     }
 
     private fun showHome() {
@@ -687,9 +711,8 @@ class MainActivity : AppCompatActivity() {
         layout.addView(label("Endereço base do serviço", 12f, MUTED), matchWrap())
         layout.addView(endpoint, matchWidth())
         val apiKey = EditText(this).apply {
-            hint = if (plugin.engine == "nmap_agent") "Sem chave para o health check" else "API key (armazenada criptografada)"
+            hint = "Token/API key (armazenado criptografado)"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            if (plugin.engine == "nmap_agent") isEnabled = false
         }
         layout.addView(apiKey, matchWidth())
         layout.addView(label("A chave será protegida pelo Android Keystore. Use HTTPS fora de uma rede local de laboratório.", 11f, MUTED), matchWrap())

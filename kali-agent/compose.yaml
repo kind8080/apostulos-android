@@ -1,0 +1,16 @@
+services:
+  apostulos-kali-bridge:
+    build: .
+    container_name: apostulos-kali-bridge
+    restart: unless-stopped
+    environment:
+      APOSTULOS_AGENT_TOKEN: ${APOSTULOS_AGENT_TOKEN:?Defina um token longo em .env}
+    ports:
+      - "127.0.0.1:8765:8765"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

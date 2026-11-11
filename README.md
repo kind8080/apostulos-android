@@ -122,3 +122,15 @@ A sincronização CISA KEV contabiliza agora somente CVEs que efetivamente corre
 - Ambos registram execução em `scan_history` e `audit_logs`; resultados aparecem em Falhas.
 - Nmap permanece como health check de agente customizado, sem execução de comandos.
 - Build Android completo e testes contra instâncias reais ainda pendentes.
+
+## Integração Android + Kali Linux (APOSTULOS 3.1 — etapa inicial)
+
+A arquitetura escolhida é híbrida: os adaptadores já embarcados continuam executando localmente no Android; um nó Kali Linux separado fornece o ambiente de ferramentas Linux remoto. O app não tenta executar binários Kali diretamente no Android.
+
+- O antigo conector de health check foi atualizado para **Kali Linux Bridge** e consulta `GET /api/v1/capabilities` com token `X-APOSTULOS-Agent` protegido pelo Android Keystore.
+- O diretório `kali-agent/` contém Dockerfile baseado em Kali Rolling, Compose e API FastAPI para inventariar Nmap, Nuclei, Nikto, SQLmap, WhatWeb, Wapiti e TShark.
+- A primeira entrega do agente é intencionalmente somente inventário; não executa comandos remotos. A execução de ferramentas será uma etapa separada, com allowlist de tarefas, autorização explícita por alvo, isolamento por job e auditoria.
+- O serviço Compose publica a porta apenas em loopback. Para acesso externo, configure HTTPS e controles de acesso em um proxy reverso; nunca exponha a API diretamente à Internet.
+- A navegação foi reorganizada em cinco áreas fixas na parte inferior: Início, Análises, Ferramentas, Plugins e Mais. Os módulos de cada área são abertos por um seletor compacto.
+
+Consulte `kali-agent/README.md` para implantação. Não há servidor gratuito provisionado automaticamente: o administrador precisa fornecer a máquina/VM ou hospedagem e o domínio/HTTPS.
