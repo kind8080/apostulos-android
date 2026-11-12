@@ -38,6 +38,7 @@ import apostulos.securityproxy.data.ScanRecord
 import apostulos.securityproxy.data.SourceSync
 import apostulos.securityproxy.data.VulnerabilitySeed
 import apostulos.securityproxy.net.LocalProxyService
+import apostulos.securityproxy.net.SupabasePluginRepository
 import apostulos.securityproxy.scan.NvdRepository
 import apostulos.securityproxy.scan.PentestScanner
 import apostulos.securityproxy.scan.RiskAssessment
@@ -575,6 +576,24 @@ class MainActivity : AppCompatActivity() {
 
     private fun showPlugins() {
         pageBody.addView(label("Central de plugins", 23f, WHITE, true), matchWrap())
+
+        val cloudCard = card(pageBody)
+        cloudCard.addView(label("Catálogo de plugins na nuvem", 17f, ACCENT, true), matchWrap())
+        cloudCard.addView(label("Plugins publicados no servidor APOSTULOS. A consulta apenas lista informações; não executa código externo.", 12f, MUTED), matchWrap())
+
+        val cloudStatus = label("Preparando consulta...", 12f, MUTED)
+        cloudCard.addView(cloudStatus, matchWrap())
+
+        val cloudList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        cloudCard.addView(cloudList, matchWidth())
+
+        cloudCard.addView(actionButton("ATUALIZAR CATÁLOGO NA NUVEM") {
+            loadCloudPluginCatalog(cloudStatus, cloudList)
+        }, matchWidth())
+
+        loadCloudPluginCatalog(cloudStatus, cloudList)
         pageBody.addView(label("Instale pacotes de manifesto JSON, ative módulos, ajuste configurações e abra o adaptador correspondente. Por segurança, pacotes externos não executam código arbitrário: cada um precisa apontar para um mecanismo interno aprovado.", 13f, MUTED), matchWrap())
         pageBody.addView(actionButton("IMPORTAR PACOTE DE PLUGIN (.JSON)") {
             pluginPackagePicker.launch(arrayOf("application/json", "text/json", "text/plain"))
@@ -713,6 +732,51 @@ class MainActivity : AppCompatActivity() {
                 pageBody.addView(label("Nenhuma atividade registrada ainda.", 12f, MUTED), matchWrap())
             } else events.forEach { event ->
                 pageBody.addView(label("${Date(event.createdAt)} • ${event.message}", 11f, MUTED), matchWrap())
+            }
+        }
+    }
+
+    private fun loadCloudPluginCatalog(
+        status: TextView,
+        listContainer: LinearLayout
+    ) {
+        status.text = "Consultando catálogo na nuvem..."
+        listContainer.removeAllViews()
+
+        lifecycleScope.launch {
+            try {
+                val plugins = SupabasePluginRepository.fetchPublishedPlugins()
+
+                if (plugins.isEmpty()) {
+                    status.text = "Nenhum plugin publicado na nuvem."
+                } else {
+                    status.text = "${plugins.size} plugin(s) encontrado(s)."
+
+                    plugins.forEach { plugin ->
+                        val c = card(listContainer)
+                        c.addView(label(plugin.name, 16f, WHITE, true), matchWrap())
+                        c.addView(
+                            label("ID: ${plugin.id} • versão ${plugin.version}", 11f, MUTED),
+                            matchWrap()
+                        )
+                        c.addView(label(plugin.description, 12f, MUTED), matchWrap())
+                        c.addView(
+                            label("Adaptador: ${plugin.engine}", 11f, MUTED),
+                            matchWrap()
+                        )
+
+                        if (plugin.officialUrl.startsWith("https://")) {
+                            c.addView(
+                                actionButton("DOCUMENTAÇÃO OFICIAL") {
+                                    openExternalUrl(plugin.officialUrl)
+                                },
+                                matchWidth()
+                            )
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                status.text = "Falha ao consultar a nuvem: ${e.message ?: "verifique a internet e a configuração"}"
             }
         }
     }
