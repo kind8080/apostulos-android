@@ -15,7 +15,8 @@ val localProperties = Properties().apply {
 }
 
 fun quotedBuildConfigValue(name: String): String {
-    val value = localProperties.getProperty(name, "")
+    val value = System.getenv(name)?.takeIf { it.isNotBlank() }
+        ?: localProperties.getProperty(name, "")
     return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 }
 
