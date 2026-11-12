@@ -158,19 +158,7 @@ fun HomeScreen(onToolsClick: () -> Unit) {
 
 @Composable
 fun ToolsScreen() {
-    SectionTitle("CENTRAL DE FERRAMENTAS")
-    Text(
-        "O catálogo será conectado ao Supabase. " +
-            "Cada ferramenta terá sua própria interface mobile.",
-        color = Muted,
-        fontSize = 14.sp
-    )
-
-    Spacer(Modifier.height(16.dp))
-    InfoCard("Reconhecimento", "Ferramentas de análise autorizada", "Em preparação")
-    InfoCard("Rede", "Diagnóstico e análise de rede", "Em preparação")
-    InfoCard("Web", "Auditoria de aplicações próprias", "Em preparação")
-    InfoCard("Laboratório", "Ambientes de testes isolados", "Em preparação")
+    PluginCatalogScreen()
 }
 
 @Composable
