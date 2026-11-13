@@ -455,7 +455,7 @@ class MainActivity : AppCompatActivity() {
         }, matchWidth())
 
         if (category != "API") {
-            pageBody.addView(sectionTitle("APOSTULOS DEFACE"), matchWrap())
+            sectionTitle("APOSTULOS DEFACE")
             pageBody.addView(label("Monitore alterações no conteúdo de páginas autorizadas usando uma referência SHA-256 salva localmente.", 12f, MUTED), matchWrap())
 
             pageBody.addView(actionButton("SALVAR REFERÊNCIA DA PÁGINA") {
