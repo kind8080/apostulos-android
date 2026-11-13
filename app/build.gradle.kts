@@ -1,3 +1,4 @@
+
 import java.util.Properties
 
 plugins {
@@ -5,6 +6,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
+    id("org.jetbrains.kotlin.kapt")
 }
 
 val localProperties = Properties().apply {
@@ -72,4 +74,12 @@ dependencies {
     implementation("io.github.jan-tennert.supabase:auth-kt")
     implementation("io.github.jan-tennert.supabase:postgrest-kt")
     implementation("io.ktor:ktor-client-android:3.0.0")
+
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    kapt("androidx.room:room-compiler:2.6.1")
+}
+
+kapt {
+    correctErrorTypes = true
 }
