@@ -64,7 +64,7 @@ class MainActivity : AppCompatActivity() {
     private var consoleModule = "dirb"
 
     private enum class Page(val label: String) {
-        HOME("Início"), PROXY("Proxy"), VPN("VPN"), DATABASE("Banco"), WEB("Web"), ANDROID("Android"), API("APIs"),
+        HOME("Início"), PROXY("Proxy"), VPN("VPN"), DATABASE("Banco"), WEB("Web"), ORCHESTRATOR("Orchestrator"), ANDROID("Android"), API("APIs"),
         CONSOLE("Console"), PLUGINS("Plugins"), TOOLS("Ferramentas"), KALI("Kali Linux"), FINDINGS("Falhas"), REPORTS("Relatórios"), SETTINGS("Ajustes")
     }
 
@@ -165,7 +165,7 @@ class MainActivity : AppCompatActivity() {
         }
         val groups = listOf(
             "Início" to listOf(Page.HOME),
-            "Análises" to listOf(Page.WEB, Page.ANDROID, Page.API, Page.DATABASE, Page.FINDINGS),
+            "Análises" to listOf(Page.WEB, Page.ORCHESTRATOR, Page.ANDROID, Page.API, Page.DATABASE, Page.FINDINGS),
             "Ferramentas" to listOf(Page.PROXY, Page.VPN, Page.CONSOLE, Page.TOOLS, Page.KALI),
             "Plugins" to listOf(Page.PLUGINS),
             "Mais" to listOf(Page.REPORTS, Page.SETTINGS)
@@ -196,6 +196,7 @@ class MainActivity : AppCompatActivity() {
             Page.VPN -> showVpn()
             Page.DATABASE -> showDatabase()
             Page.WEB -> showUrlScanner("Web")
+            Page.ORCHESTRATOR -> showOrchestrator()
             Page.API -> showUrlScanner("API")
             Page.ANDROID -> showAndroidScanner()
             Page.CONSOLE -> showConsole()
@@ -432,6 +433,113 @@ class MainActivity : AppCompatActivity() {
             }
             if (items.isEmpty()) results.addView(label("Nenhum registro encontrado. Consulte a NVD ou tente outro termo.", 13f, MUTED), matchWrap())
         }
+    }
+
+    private fun showOrchestrator() {
+        pageBody.addView(
+            label("APOSTULOS ORCHESTRATOR", 23f, WHITE, true),
+            matchWrap()
+        )
+        pageBody.addView(
+            label(
+                "Painel central para executar os módulos de segurança autorizados.",
+                13f, MUTED
+            ),
+            matchWrap()
+        )
+
+        sectionTitle("ALVO DA ANÁLISE")
+        val target = field("https://exemplo.com")
+        pageBody.addView(target, matchWidth())
+
+        val authorized = CheckBox(this).apply {
+            text = "Tenho autorização para testar este ativo"
+            setTextColor(WHITE)
+            buttonTintList = ContextCompat.getColorStateList(
+                this@MainActivity,
+                android.R.color.holo_orange_light
+            )
+        }
+        pageBody.addView(authorized, matchWidth())
+
+        fun authorizedTarget(): String? {
+            if (!authorized.isChecked) {
+                toast("Confirme que possui autorização para testar este ativo")
+                return null
+            }
+
+            val value = target.text.toString().trim()
+            if (value.isBlank()) {
+                toast("Informe o endereço do alvo")
+                return null
+            }
+            return value
+        }
+
+        sectionTitle("AUDITORIA WEB")
+        pageBody.addView(
+            label("Verificações passivas de HTTP, cabeçalhos e configurações observáveis.", 12f, MUTED),
+            matchWrap()
+        )
+        pageBody.addView(actionButton("EXECUTAR ANÁLISE WEB") {
+            val value = authorizedTarget() ?: return@actionButton
+            if (!pluginEnabled("web_scan")) {
+                toast("Ative Auditoria Web em Plugins")
+            } else {
+                runUrlAnalysis(value, "Web")
+            }
+        }, matchWidth())
+
+        sectionTitle("AUDITORIA DE API")
+        pageBody.addView(
+            label("Verificações passivas de resposta e CORS.", 12f, MUTED),
+            matchWrap()
+        )
+        pageBody.addView(actionButton("EXECUTAR ANÁLISE API") {
+            val value = authorizedTarget() ?: return@actionButton
+            if (!pluginEnabled("api_scan")) {
+                toast("Ative Auditoria de APIs em Plugins")
+            } else {
+                runUrlAnalysis(value, "API")
+            }
+        }, matchWidth())
+
+        sectionTitle("MONITORAMENTO DE ALTERAÇÕES")
+        pageBody.addView(
+            label("Salve uma referência SHA-256 ou compare o conteúdo com uma referência existente.", 12f, MUTED),
+            matchWrap()
+        )
+        pageBody.addView(actionButton("SALVAR REFERÊNCIA") {
+            val value = authorizedTarget() ?: return@actionButton
+            runDefacementAnalysis(value, true)
+        }, matchWidth())
+        pageBody.addView(actionButton("COMPARAR COM REFERÊNCIA") {
+            val value = authorizedTarget() ?: return@actionButton
+            runDefacementAnalysis(value, false)
+        }, matchWidth())
+
+        sectionTitle("ANÁLISE ANDROID")
+        pageBody.addView(
+            label("Selecione um APK para análise estática local.", 12f, MUTED),
+            matchWrap()
+        )
+        pageBody.addView(actionButton("SELECIONAR APK") {
+            if (!pluginEnabled("apk_static")) {
+                toast("Ative Análise Android em Plugins")
+            } else {
+                apkPicker.launch(
+                    arrayOf(
+                        "application/vnd.android.package-archive",
+                        "application/octet-stream"
+                    )
+                )
+            }
+        }, matchWidth())
+
+        sectionTitle("RESULTADOS")
+        pageBody.addView(actionButton("CONSULTAR ACHADOS") {
+            render(Page.FINDINGS)
+        }, matchWidth())
     }
 
     private fun showUrlScanner(category: String) {

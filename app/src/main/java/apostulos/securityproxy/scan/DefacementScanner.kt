@@ -2,8 +2,7 @@ package apostulos.securityproxy.scan
 
 import android.content.Context
 import apostulos.securityproxy.data.Finding
-import java.net.HttpURLConnection
-import java.net.InetAddress
+import okhttp3.Request
 import java.net.URL
 import java.security.MessageDigest
 
@@ -27,36 +26,34 @@ object DefacementScanner {
     ): Pair<DefacementResult, List<Finding>> {
 
         val findings = mutableListOf<Finding>()
+
         val preferences = context.getSharedPreferences(
             "apostulos_defacement_baselines",
             Context.MODE_PRIVATE
         )
 
-        val url = URL(rawUrl.trim())
+        var currentUrl = NetworkTargetValidator.validate(rawUrl.trim())
+        val originalUrl = currentUrl
+        var redirects = 0
 
-        validatePublicUrl(url)
+        while (true) {
+            val request = Request.Builder()
+                .url(currentUrl)
+                .header("User-Agent", "APOSTULOS-DEFACE/1.0")
+                .get()
+                .build()
 
-        var connection = url.openConnection() as HttpURLConnection
-        connection.instanceFollowRedirects = false
-        connection.connectTimeout = TIMEOUT
-        connection.readTimeout = TIMEOUT
-        connection.setRequestProperty("User-Agent", "APOSTULOS-DEFACE/1.0")
+            val response = SafeHttpClient.client.newCall(request).execute()
 
-        try {
-            var currentUrl = url
-            var redirects = 0
-
-            while (true) {
-                connection.connect()
-
-                val status = connection.responseCode
+            try {
+                val status = response.code
 
                 if (status in 300..399) {
                     require(redirects < 3) {
                         "Limite de redirecionamentos atingido."
                     }
 
-                    val location = connection.getHeaderField("Location")
+                    val location = response.header("Location")
                         ?: error("Redirecionamento sem destino.")
 
                     val nextUrl = URL(currentUrl, location)
@@ -65,24 +62,17 @@ object DefacementScanner {
                         "Redirecionamento para outro domínio bloqueado."
                     }
 
-                    require(nextUrl.protocol == currentUrl.protocol &&
-                        nextUrl.port.let { if (it == -1) defaultPort(nextUrl.protocol) else it } ==
-                        currentUrl.port.let { if (it == -1) defaultPort(currentUrl.protocol) else it }) {
+                    require(
+                        nextUrl.protocol == currentUrl.protocol &&
+                        effectivePort(nextUrl) == effectivePort(currentUrl)
+                    ) {
                         "Mudança de protocolo ou porta bloqueada."
                     }
 
-                    validatePublicUrl(nextUrl)
-
-                    connection.disconnect()
-                    currentUrl = nextUrl
-                    connection = currentUrl.openConnection() as HttpURLConnection
-                    connection.instanceFollowRedirects = false
-                    connection.connectTimeout = TIMEOUT
-                    connection.readTimeout = TIMEOUT
-                    connection.setRequestProperty(
-                        "User-Agent",
-                        "APOSTULOS-DEFACE/1.0"
+                    currentUrl = NetworkTargetValidator.validate(
+                        nextUrl.toString()
                     )
+
                     redirects++
                     continue
                 }
@@ -91,7 +81,8 @@ object DefacementScanner {
                     "O servidor respondeu HTTP $status."
                 }
 
-                val contentType = connection.contentType.orEmpty()
+                val contentType = response.header("Content-Type").orEmpty()
+
                 require(
                     contentType.contains("text/html", true) ||
                     contentType.contains("text/plain", true) ||
@@ -101,12 +92,14 @@ object DefacementScanner {
                 }
 
                 val output = java.io.ByteArrayOutputStream()
+                val input = response.body?.byteStream()
+                    ?: error("Resposta sem conteúdo.")
 
-                connection.inputStream.use { input ->
+                input.use {
                     val buffer = ByteArray(4096)
 
                     while (true) {
-                        val count = input.read(buffer)
+                        val count = it.read(buffer)
                         if (count < 0) break
 
                         require(output.size() + count <= MAX_BYTES) {
@@ -117,45 +110,52 @@ object DefacementScanner {
                     }
                 }
 
-                val content = output.toString("UTF-8")
-                val normalized = content.replace(Regex("""\s+"""), " ").trim()
+                val content = String(output.toByteArray(), Charsets.UTF_8)
+                val normalized = content.replace(
+                    Regex("""\s+"""), " "
+                ).trim()
+
                 val hash = sha256(normalized)
 
-                val baselineKey = sha256(url.toString().toByteArray())
+                val baselineKey = sha256(originalUrl.toString().toByteArray())
                 val previousHash = preferences.getString(baselineKey, null)
                 val baselineExists = previousHash != null
                 val changed = baselineExists && previousHash != hash
 
                 val indicators = mutableListOf<String>()
 
-                if (Regex("""(?i)<script[^>]+src=["']https?://""").containsMatchIn(content)) {
+                if (Regex("""(?i)<script[^>]+src=["']https?://""")
+                        .containsMatchIn(content)) {
                     indicators.add("Script externo encontrado.")
                 }
 
-                if (Regex("""(?i)<iframe[^>]+src=""").containsMatchIn(content)) {
+                if (Regex("""(?i)<iframe[^>]+src=""")
+                        .containsMatchIn(content)) {
                     indicators.add("Iframe encontrado.")
                 }
 
-                if (
-                    Regex(
-                        """(?i)hacked by|owned by|site hacked|pwned by"""
-                    ).containsMatchIn(content)
-                ) {
-                    indicators.add("Texto associado a mensagens de defacement encontrado.")
+                if (Regex("""(?i)hacked by|owned by|site hacked|pwned by""")
+                        .containsMatchIn(content)) {
+                    indicators.add(
+                        "Texto associado a mensagens de defacement encontrado."
+                    )
                 }
 
-                if (Regex("""(?i)document\.write\s*\(""").containsMatchIn(content)) {
+                if (Regex("""(?i)document\.write\s*\(""")
+                        .containsMatchIn(content)) {
                     indicators.add("Uso de document.write encontrado.")
                 }
 
                 if (saveBaseline) {
-                    preferences.edit().putString(baselineKey, hash).apply()
+                    preferences.edit()
+                        .putString(baselineKey, hash)
+                        .apply()
                 }
 
                 if (changed) {
                     findings.add(
                         createFinding(
-                            url.toString(),
+                            originalUrl.toString(),
                             "Alteração no conteúdo da página",
                             "O SHA-256 atual é diferente da referência salva. Isso não comprova invasão."
                         )
@@ -165,7 +165,7 @@ object DefacementScanner {
                 indicators.forEach { indicator ->
                     findings.add(
                         createFinding(
-                            url.toString(),
+                            originalUrl.toString(),
                             indicator,
                             "Indicador heurístico encontrado. É necessária análise manual."
                         )
@@ -189,37 +189,17 @@ object DefacementScanner {
                     ),
                     findings
                 )
+            } finally {
+                response.close()
             }
-        } finally {
-            connection.disconnect()
         }
     }
 
-    private fun validatePublicUrl(url: URL) {
-        require(url.protocol == "http" || url.protocol == "https") {
-            "Somente URLs HTTP e HTTPS são permitidas."
-        }
-
-        require(url.userInfo == null && !url.host.isNullOrBlank()) {
-            "URL inválida."
-        }
-
-        val addresses = InetAddress.getAllByName(url.host)
-        require(addresses.isNotEmpty() && addresses.none { isPrivate(it) }) {
-            "Endereço privado ou local não permitido."
-        }
-    }
+    private fun effectivePort(url: URL): Int =
+        if (url.port == -1) defaultPort(url.protocol) else url.port
 
     private fun defaultPort(protocol: String): Int =
         if (protocol == "https") 443 else 80
-
-    private fun isPrivate(address: InetAddress): Boolean {
-        return address.isAnyLocalAddress ||
-            address.isLoopbackAddress ||
-            address.isLinkLocalAddress ||
-            address.isSiteLocalAddress ||
-            address.isMulticastAddress
-    }
 
     private fun sha256(value: String): String {
         return sha256(value.toByteArray(Charsets.UTF_8))

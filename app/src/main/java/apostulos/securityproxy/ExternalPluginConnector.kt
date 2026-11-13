@@ -5,13 +5,13 @@ import android.net.Uri
 import apostulos.securityproxy.data.Finding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.MediaType.Companion.toMediaType
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.DataOutputStream
-import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
-import java.util.UUID
 
 object ExternalPluginConnector {
     data class ZapResult(val findings: List<Finding>, val summary: String)
@@ -72,30 +72,50 @@ object ExternalPluginConnector {
         val originalName = queryDisplayName(context, uri).ifBlank { "selected.apk" }
         require(originalName.endsWith(".apk", ignoreCase = true)) { "Selecione um arquivo com extensão .apk" }
         val name = originalName.replace(Regex("[^A-Za-z0-9._-]"), "_")
-        val boundary = "----APOSTULOS${UUID.randomUUID().toString().replace("-", "")}"
-        val conn = (URL("$base/api/v1/upload").openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"; doOutput = true; connectTimeout = 20_000; readTimeout = 60_000
-            setRequestProperty("Authorization", apiKey); setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
-            setRequestProperty("Accept", "application/json")
-        }
-        val uploadBody = try {
-            DataOutputStream(conn.outputStream).use { out ->
-                out.writeBytes("--$boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"$name\"\r\nContent-Type: application/vnd.android.package-archive\r\n\r\n")
+        val uploadUrl = "$base/api/v1/upload"
+        val apkBody = object : okhttp3.RequestBody() {
+            override fun contentType() =
+                "application/vnd.android.package-archive".toMediaType()
+
+            override fun contentLength(): Long = -1L
+
+            override fun writeTo(sink: okio.BufferedSink) {
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     val buffer = ByteArray(32 * 1024)
                     var total = 0L
+
                     while (true) {
                         val count = input.read(buffer)
                         if (count < 0) break
+
                         total += count
-                        require(total <= 250L * 1024L * 1024L) { "APK excede o limite de envio de 250 MB" }
-                        out.write(buffer, 0, count)
+                        require(total <= 250L * 1024L * 1024L) {
+                            "APK excede o limite de envio de 250 MB"
+                        }
+
+                        sink.write(buffer, 0, count)
                     }
                 } ?: error("Não foi possível abrir o APK selecionado")
-                out.writeBytes("\r\n--$boundary--\r\n")
             }
-            readResponse(conn)
-        } finally { conn.disconnect() }
+        }
+
+        val multipartBody = okhttp3.MultipartBody.Builder()
+            .setType(okhttp3.MultipartBody.FORM)
+            .addFormDataPart("file", name, apkBody)
+            .build()
+
+        val uploadRequest = Request.Builder()
+            .url(uploadUrl)
+            .header("Authorization", apiKey)
+            .header("Accept", "application/json")
+            .post(multipartBody)
+            .build()
+
+        val uploadBody = PluginHttpClient.clientFor(URL(uploadUrl))
+            .newCall(uploadRequest)
+            .execute()
+            .use { response -> readResponse(response) }
+
         val upload = JSONObject(uploadBody)
         val hash = upload.optString("hash")
         require(hash.matches(Regex("^[a-fA-F0-9]{32,64}$"))) { "MobSF não retornou um hash de arquivo válido" }
@@ -140,34 +160,75 @@ object ExternalPluginConnector {
         return out.distinctBy { it.category + it.title + it.evidence }.take(300)
     }
 
-    private fun validateBase(baseUrl: String): String {
-        val base = baseUrl.trim().trimEnd('/')
-        val parsed = URL(base)
-        require(parsed.protocol == "https" || (parsed.protocol == "http" && parsed.host in setOf("localhost", "127.0.0.1", "::1"))) { "Use HTTPS. HTTP só é permitido para localhost." }
-        require(parsed.userInfo.isNullOrBlank()) { "Não inclua usuário/senha na URL" }
-        require(parsed.query.isNullOrBlank() && parsed.ref.isNullOrBlank()) { "Informe somente a URL base, sem query ou fragmento" }
-        require(!parsed.host.isNullOrBlank()) { "Host do serviço inválido" }
-        return base
+    private fun validateBase(baseUrl: String): String =
+        PluginHttpClient.validateBase(baseUrl)
+
+    private fun request(
+        url: String,
+        method: String,
+        header: String? = null,
+        headerValue: String? = null,
+        contentType: String? = null,
+        body: ByteArray? = null
+    ): String {
+        val parsedUrl = URL(url)
+        val requestBody = body?.toRequestBody(
+            contentType?.toMediaType()
+        )
+
+        val builder = Request.Builder()
+            .url(url)
+            .header("Accept", "application/json")
+
+        if (header != null && headerValue != null) {
+            builder.header(header, headerValue)
+        }
+
+        if (contentType != null) {
+            builder.header("Content-Type", contentType)
+        }
+
+        builder.method(method, requestBody)
+
+        val request = builder.build()
+
+        return PluginHttpClient.clientFor(parsedUrl)
+            .newCall(request)
+            .execute()
+            .use { response ->
+                readResponse(response)
+            }
     }
 
-    private fun request(url: String, method: String, header: String? = null, headerValue: String? = null, contentType: String? = null, body: ByteArray? = null): String {
-        val connection = (URL(url).openConnection() as HttpURLConnection)
-        return try {
-            connection.requestMethod = method
-            connection.connectTimeout = 15_000
-            connection.readTimeout = 60_000
-            connection.setRequestProperty("Accept", "application/json")
-            if (header != null) connection.setRequestProperty(header, headerValue)
-            if (contentType != null) connection.setRequestProperty("Content-Type", contentType)
-            if (body != null) { connection.doOutput = true; connection.outputStream.use { it.write(body) } }
-            readResponse(connection)
-        } finally { connection.disconnect() }
-    }
+    private fun readResponse(response: okhttp3.Response): String {
+        val output = java.io.ByteArrayOutputStream()
+        val input = response.body?.byteStream()
 
-    private fun readResponse(connection: HttpURLConnection): String {
-        val status = connection.responseCode
-        val body = (if (status in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader()?.use { it.readText().take(2_000_000) }.orEmpty()
-        require(status in 200..299) { "Servidor respondeu HTTP $status: ${body.take(500)}" }
+        if (input != null) {
+            input.use {
+                val buffer = ByteArray(8192)
+                var total = 0
+
+                while (true) {
+                    val count = it.read(buffer)
+                    if (count < 0) break
+
+                    total += count
+                    require(total <= 2_000_000) {
+                        "Resposta do serviço excede 2 MB."
+                    }
+
+                    output.write(buffer, 0, count)
+                }
+            }
+        }
+
+        val body = output.toString("UTF-8")
+
+        require(response.isSuccessful) {
+            "Servidor respondeu HTTP ${response.code}: ${body.take(500)}"
+        }
+
         return body
     }
 
