@@ -40,6 +40,7 @@ import apostulos.securityproxy.data.VulnerabilitySeed
 import apostulos.securityproxy.net.LocalProxyService
 import apostulos.securityproxy.scan.NvdRepository
 import apostulos.securityproxy.scan.PentestScanner
+import apostulos.securityproxy.scan.DefacementScanner
 import apostulos.securityproxy.scan.RiskAssessment
 import apostulos.securityproxy.security.LocalAuth
 import kotlinx.coroutines.Dispatchers
@@ -435,21 +436,96 @@ class MainActivity : AppCompatActivity() {
 
     private fun showUrlScanner(category: String) {
         pageBody.addView(label(if (category == "API") "Análise de APIs" else "Análise Web", 23f, WHITE, true), matchWrap())
-        pageBody.addView(label("Verificações passivas de configuração e cabeçalhos HTTP. Não executa exploração, brute force ou alteração de dados.", 13f, MUTED), matchWrap())
+        pageBody.addView(label("Verificações passivas de configuração e cabeçalhos HTTP.", 13f, MUTED), matchWrap())
+
         val target = field(if (category == "API") "https://api.exemplo.com/health" else "https://exemplo.com")
         val authorized = CheckBox(this).apply {
             text = "Tenho autorização para testar este ativo"
             setTextColor(WHITE)
             buttonTintList = ContextCompat.getColorStateList(this@MainActivity, android.R.color.holo_orange_light)
         }
+
         pageBody.addView(target, matchWidth())
         pageBody.addView(authorized, matchWidth())
+
         pageBody.addView(actionButton("INICIAR ANÁLISE ${category.uppercase(Locale.ROOT)}") {
             if (!authorized.isChecked) toast("Confirme que possui autorização para testar este ativo")
             else if (!pluginEnabled(if (category == "API") "api_scan" else "web_scan")) toast("Ative este módulo em Plugins antes de executar")
             else runUrlAnalysis(target.text.toString(), category)
         }, matchWidth())
-        pageBody.addView(label("A análise verifica a resposta inicial, cabeçalhos de segurança, cookies e algumas configurações observáveis. Ausência de cabeçalho é um ponto de hardening, não confirmação automática de falha explorável.", 12f, MUTED), matchWrap())
+
+        if (category != "API") {
+            pageBody.addView(sectionTitle("APOSTULOS DEFACE"), matchWrap())
+            pageBody.addView(label("Monitore alterações no conteúdo de páginas autorizadas usando uma referência SHA-256 salva localmente.", 12f, MUTED), matchWrap())
+
+            pageBody.addView(actionButton("SALVAR REFERÊNCIA DA PÁGINA") {
+                if (!authorized.isChecked) toast("Confirme que possui autorização")
+                else runDefacementAnalysis(target.text.toString(), true)
+            }, matchWidth())
+
+            pageBody.addView(actionButton("COMPARAR COM A REFERÊNCIA") {
+                if (!authorized.isChecked) toast("Confirme que possui autorização")
+                else runDefacementAnalysis(target.text.toString(), false)
+            }, matchWidth())
+        }
+    }
+
+    private fun runDefacementAnalysis(target: String, saveBaseline: Boolean) {
+        toast(if (saveBaseline) "Salvando referência..." else "Comparando página...")
+
+        lifecycleScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val result = DefacementScanner.inspect(
+                        this@MainActivity,
+                        target,
+                        saveBaseline
+                    )
+
+                    db.findingDao().addAll(result.second)
+
+                    db.scanDao().add(
+                        ScanRecord(
+                            target = target,
+                            scanType = "DEFACEMENT",
+                            status = "Concluída",
+                            summary = result.first.summary + " SHA-256: " + result.first.hash
+                        )
+                    )
+
+                    db.auditLogDao().add(
+                        AuditLog(
+                            category = "DEFACEMENT",
+                            message = result.first.summary
+                        )
+                    )
+
+                    result
+                }
+            }.onSuccess { pair ->
+                val result = pair.first
+
+                toast(
+                    result.summary + " Hash: " + result.hash.take(16)
+                )
+
+                if (pair.second.isNotEmpty()) {
+                    render(Page.FINDINGS)
+                }
+            }.onFailure { error ->
+                withContext(Dispatchers.IO) {
+                    db.scanDao().add(
+                        ScanRecord(
+                            target = target,
+                            scanType = "DEFACEMENT",
+                            status = "Falhou",
+                            summary = error.message ?: "Erro na análise"
+                        )
+                    )
+                }
+                toast("Falha no DEFACE: ${error.message}")
+            }
+        }
     }
 
     private fun runUrlAnalysis(target: String, category: String) {
