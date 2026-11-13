@@ -1,3 +1,4 @@
+
 package apostulos.securityproxy.scan
 
 import okhttp3.Dns
@@ -8,23 +9,29 @@ import java.util.concurrent.TimeUnit
 
 object SafeHttpClient {
 
-    private val safeDns = Dns { hostname ->
-        val addresses = try {
-            Dns.SYSTEM.lookup(hostname)
-        } catch (_: Exception) {
-            throw UnknownHostException("Não foi possível resolver o domínio.")
-        }
-
-        if (addresses.isEmpty() || addresses.any {
-                NetworkTargetValidator.isNonPublic(it)
+    private val safeDns = object : Dns {
+        override fun lookup(
+            hostname: String
+        ): List<java.net.InetAddress> {
+            val addresses = try {
+                Dns.SYSTEM.lookup(hostname)
+            } catch (_: Exception) {
+                throw UnknownHostException(
+                    "Não foi possível resolver o domínio."
+                )
             }
-        ) {
-            throw UnknownHostException(
-                "Destino privado, local ou reservado bloqueado."
-            )
-        }
 
-        addresses
+            if (addresses.isEmpty() || addresses.any {
+                    NetworkTargetValidator.isNonPublic(it)
+                }
+            ) {
+                throw UnknownHostException(
+                    "Destino privado, local ou reservado bloqueado."
+                )
+            }
+
+            return addresses
+        }
     }
 
     val client: OkHttpClient = OkHttpClient.Builder()

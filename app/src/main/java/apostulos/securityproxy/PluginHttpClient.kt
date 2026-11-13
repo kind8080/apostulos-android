@@ -1,3 +1,4 @@
+
 package apostulos.securityproxy
 
 import okhttp3.Dns
@@ -52,48 +53,54 @@ object PluginHttpClient {
         val host = normalizeHost(url.host)
         val local = isLocalHost(host)
 
-        val safeDns = Dns { hostname ->
-            val normalized = normalizeHost(hostname)
+        val safeDns = object : Dns {
+            override fun lookup(
+                hostname: String
+            ): List<java.net.InetAddress> {
+                val normalized = normalizeHost(hostname)
 
-            if (normalized != host) {
-                throw UnknownHostException(
-                    "Resolução de hostname diferente do serviço bloqueada."
-                )
-            }
-
-            val addresses = try {
-                Dns.SYSTEM.lookup(hostname)
-            } catch (_: Exception) {
-                throw UnknownHostException(
-                    "Não foi possível resolver o domínio do plugin."
-                )
-            }
-
-            if (addresses.isEmpty()) {
-                throw UnknownHostException("Domínio sem endereços válidos.")
-            }
-
-            if (local) {
-                if (!isLoopbackHost(normalized) ||
-                    addresses.any { !it.isLoopbackAddress }
-                ) {
+                if (normalized != host) {
                     throw UnknownHostException(
-                        "Destino local fora do loopback bloqueado."
+                        "Resolução de hostname diferente do serviço bloqueada."
                     )
                 }
-            } else {
-                if (addresses.any {
-                        apostulos.securityproxy.scan.NetworkTargetValidator
-                            .isNonPublic(it)
+
+                val addresses = try {
+                    Dns.SYSTEM.lookup(hostname)
+                } catch (_: Exception) {
+                    throw UnknownHostException(
+                        "Não foi possível resolver o domínio do plugin."
+                    )
+                }
+
+                if (addresses.isEmpty()) {
+                    throw UnknownHostException(
+                        "Domínio sem endereços válidos."
+                    )
+                }
+
+                if (local) {
+                    if (!isLoopbackHost(normalized) ||
+                        addresses.any { !it.isLoopbackAddress }
+                    ) {
+                        throw UnknownHostException(
+                            "Destino local fora do loopback bloqueado."
+                        )
                     }
-                ) {
-                    throw UnknownHostException(
-                        "Destino privado ou reservado bloqueado."
-                    )
+                } else {
+                    if (addresses.any {
+                            apostulos.securityproxy.scan.NetworkTargetValidator
+                                .isNonPublic(it)
+                        }
+                    ) {
+                        throw UnknownHostException(
+                            "Destino privado ou reservado bloqueado."
+                        )
+                    }
                 }
-            }
 
-            addresses
+                return addresses
+            }
         }
 
         return OkHttpClient.Builder()
@@ -126,13 +133,16 @@ object PluginHttpClient {
         )
 
         if (ipv4Literal) {
-            val octets = host.split(".").map { it.toIntOrNull() ?: return false }
+            val octets = host.split(".").map {
+                it.toIntOrNull() ?: return false
+            }
             if (octets.any { it !in 0..255 }) return false
             return octets[0] == 127
         }
 
         return host == "::1" || host == "0:0:0:0:0:0:0:1"
     }
+
     private val URL.origin: String
         get() {
             val portPart = if (port == -1) "" else ":$port"
