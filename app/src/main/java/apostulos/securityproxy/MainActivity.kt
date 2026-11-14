@@ -16,6 +16,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.lifecycleScope
+import apostulos.securityproxy.data.AppDatabase
+import apostulos.securityproxy.data.VulnerabilitySeed
+import kotlinx.coroutines.launch
 
 private val Background = Color(0xFF090D18)
 private val Panel = Color(0xFF151D2D)
@@ -23,8 +27,23 @@ private val Accent = Color(0xFF35D0B0)
 private val Muted = Color(0xFF9AA8BD)
 
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Inicialização segura do banco Room
+        lifecycleScope.launch {
+            try {
+                val database = AppDatabase.get(applicationContext)
+                VulnerabilitySeed.install(database)
+            } catch (error: Exception) {
+                android.util.Log.e(
+                    "APOSTULOS_DB",
+                    "Falha ao inicializar o banco Room",
+                    error
+                )
+            }
+        }
 
         setContent {
             ApostulosApp()
@@ -124,21 +143,27 @@ fun HomeScreen(onToolsClick: () -> Unit) {
     ) {
         Column(Modifier.padding(20.dp)) {
             Text("AMBIENTE APOSTULOS", color = Accent, fontSize = 12.sp)
+
             Spacer(Modifier.height(10.dp))
+
             Text(
                 "Seu laboratório Linux na nuvem.",
                 color = Color.White,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
             )
+
             Spacer(Modifier.height(8.dp))
+
             Text(
                 "A plataforma está sendo preparada. " +
                     "A conexão com o servidor será adicionada nas próximas etapas.",
                 color = Muted,
                 fontSize = 14.sp
             )
+
             Spacer(Modifier.height(18.dp))
+
             Button(
                 onClick = onToolsClick,
                 modifier = Modifier.fillMaxWidth()
@@ -164,6 +189,7 @@ fun ToolsScreen() {
 @Composable
 fun SystemScreen() {
     SectionTitle("CONFIGURAÇÕES DO SISTEMA")
+
     InfoCard("Conta", "Autenticação e perfil", "Supabase")
     InfoCard("Conexão", "Servidor remoto APOSTULOS", "Não configurado")
     InfoCard("Desktop Linux", "Ambiente XFCE remoto", "Opcional — futuro")
@@ -178,11 +204,16 @@ fun SectionTitle(title: String) {
         fontSize = 13.sp,
         fontWeight = FontWeight.Bold
     )
+
     Spacer(Modifier.height(12.dp))
 }
 
 @Composable
-fun InfoCard(title: String, description: String, status: String) {
+fun InfoCard(
+    title: String,
+    description: String,
+    status: String
+) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Panel),
         shape = RoundedCornerShape(14.dp),
@@ -195,11 +226,26 @@ fun InfoCard(title: String, description: String, status: String) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(Modifier.weight(1f)) {
-                Text(title, color = Color.White, fontWeight = FontWeight.Bold)
+                Text(
+                    title,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+
                 Spacer(Modifier.height(4.dp))
-                Text(description, color = Muted, fontSize = 12.sp)
+
+                Text(
+                    description,
+                    color = Muted,
+                    fontSize = 12.sp
+                )
             }
-            Text(status, color = Accent, fontSize = 11.sp)
+
+            Text(
+                status,
+                color = Accent,
+                fontSize = 11.sp
+            )
         }
     }
 }
